@@ -49,6 +49,10 @@ RUN apk add --no-cache \
 
 RUN aws --version   # Just to make sure its installed alright
 
+
+RUN apk add --no-cache mysql-client && rm -rf /var/cache/apk/*
+
+
 RUN         npm install -g sass
 ### xxx
 
