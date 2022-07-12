@@ -58,7 +58,9 @@ RUN         npm install -g sass
 
 RUN         ln -s /usr/bin/sass /usr/bin/scss
 
-RUN         /usr/bin/wget https://getcomposer.org/installer -O - -q | php -- --quiet  --version=1.10.24
+RUN         cd /usr/bin/ && /usr/bin/wget https://getcomposer.org/installer -O - -q | php -- --quiet  --version=1.10.24
+
+RUN         mv /usr/bin/composer.phar /usr/bin/composer && ln -s /usr/bin/composer /composer.phar 
 
 RUN         mkdir -p /opt/composer/
 
