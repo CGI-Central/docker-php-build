@@ -1,4 +1,4 @@
-FROM        node:14-alpine3.13
+FROM        node:20.11-alpine3.19
 MAINTAINER  Alex Scott <alex@cgi-central.net>
 
 ### BUILD it 
