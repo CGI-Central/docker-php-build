@@ -1,4 +1,4 @@
-FROM        node:20.11-alpine3.19
+FROM php:7.4-zts-alpine3.16
 MAINTAINER  Alex Scott <alex@cgi-central.net>
 
 ### BUILD it 
@@ -9,64 +9,45 @@ RUN         mkdir -p /opt
 RUN         addgroup -g 1100 phing
 RUN         adduser -h /opt/composer -s /bin/ash -g "Phing" -u 1100 -D -G phing phing
 
-# Packages management
+## Packages management
 RUN         apk update && \
             apk upgrade && \
-            # Install packages
             apk add --no-cache \
-                    ca-certificates graphviz shadow \
+                    curl ca-certificates graphviz shadow \
                     git git-lfs patch bash tar openssh-client zip \
-                    npm \
-		    mysql-client \
-                    php7-pear \
-                    php7-zip \
-                    php7-cli \
-                    php7-ctype \
-                    php7-curl \
-                    php7-dom \
-                    php7-json \
-                    php7-mbstring \
-                    php7-openssl \
-                    php7-pdo_sqlite \
-                    php7-phar \
-                    php7-simplexml \
-                    php7-tokenizer \
-                    php7-xml \
-                    php7-session \
-                    php7-pdo_mysql \
-                    php7-xmlwriter && \
-            # clean
-            rm -rf /var/cache/apk/*
+                    npm nodejs-current \
+		            mysql-client \
+                    python3 py3-pip
+
+RUN curl -sSLf \
+        -o /usr/local/bin/install-php-extensions \
+        https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions && \
+    chmod +x /usr/local/bin/install-php-extensions
 
 
-RUN apk add --no-cache \
-        python3 \
-        py3-pip \
-    && pip3 install --upgrade pip \
-    && pip3 install --no-cache-dir \
-        awscli \
+RUN install-php-extensions zip pdo_mysql
+
+# clean
+RUN rm -rf /var/cache/apk/* && rm /usr/local/bin/install-php-extensions
+
+
+RUN pip3 install --upgrade pip \
+   && pip3 install --no-cache-dir awscli \
     && rm -rf /var/cache/apk/*
 
 RUN aws --version   # Just to make sure its installed alright
 
-
-RUN apk add --no-cache mysql-client && rm -rf /var/cache/apk/*
-
-
 RUN         npm install -g sass
-### xxx
 
-RUN         ln -s /usr/bin/sass /usr/bin/scss
+RUN         ln -s /usr/local/bin/sass /usr/bin/scss
 
-RUN         cd /usr/bin/ && /usr/bin/wget https://getcomposer.org/installer -O - -q | php -- --quiet  --version=1.10.24
+RUN         cd /usr/bin/ && /usr/bin/wget https://getcomposer.org/installer -O - -q | php -- --quiet  --version=2.7.2
 
-RUN         mv /usr/bin/composer.phar /usr/bin/composer && ln -s /usr/bin/composer /composer.phar 
+RUN         mv /usr/bin/composer.phar /usr/bin/composer && ln -s /usr/bin/composer /composer.phar
 
 RUN         mkdir -p /opt/composer/
 
-RUN         pear install Archive_Tar
-
-# RUN         git lfs install
+RUN         test -f  /usr/local/lib/php/Archive/Tar.php || pear install Archive_Tar
 
 # Run environment variable, required files, etc.
 ENV         PHING_UID  1100
