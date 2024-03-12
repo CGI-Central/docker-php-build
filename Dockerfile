@@ -1,7 +1,17 @@
-FROM php:7.4-zts-alpine3.16
+ARG NODE_VERSION=20
+ARG ALPINE_VERSION=3.16
+
+FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS node
+
+FROM php:7.4-zts-alpine${ALPINE_VERSION}
 MAINTAINER  Alex Scott <alex@cgi-central.net>
 
-### BUILD it 
+COPY --from=node /usr/lib /usr/lib
+COPY --from=node /usr/local/lib /usr/local/lib
+COPY --from=node /usr/local/include /usr/local/include
+COPY --from=node /usr/local/bin /usr/local/bin
+
+### BUILD it
 ### docker build -t docker-php-build https://raw.githubusercontent.com/alex-scott/hurrypress-phing/master/Dockerfile
 
 # Prepare environment
@@ -15,7 +25,6 @@ RUN         apk update && \
             apk add --no-cache \
                     curl ca-certificates graphviz shadow \
                     git git-lfs patch bash tar openssh-client zip \
-                    npm nodejs-current \
 		            mysql-client \
                     python3 py3-pip
 
@@ -36,8 +45,6 @@ RUN pip3 install --upgrade pip \
     && rm -rf /var/cache/apk/*
 
 RUN aws --version   # Just to make sure its installed alright
-
-RUN         npm install -g npm@8.19.4
 
 RUN         npm install -g sass
 
