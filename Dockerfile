@@ -37,7 +37,7 @@ RUN pip3 install --upgrade pip \
 
 RUN aws --version   # Just to make sure its installed alright
 
-RUN         npm install -g npm@latest
+RUN         npm install -g npm@8.19.4
 
 RUN         npm install -g sass
 
