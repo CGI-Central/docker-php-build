@@ -1,58 +1,44 @@
-ARG NODE_VERSION=24
-ARG ALPINE_VERSION=3.22
-ARG PNPM_VERSION=10.31.0
+ARG PHP_VERSION=8.5
+ARG NODE_VERSION=26
+ARG ALPINE_VERSION=3.24
+
+### docker build -t docker-php-build .
 
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS node
 
-FROM php:8.2-alpine${ALPINE_VERSION}
-# MAINTAINER  Alex Scott <alex@cgi-central.net>
+FROM php:${PHP_VERSION}-cli-alpine${ALPINE_VERSION}
 
-COPY --from=node /usr/lib /usr/lib
-COPY --from=node /usr/local/lib /usr/local/lib
-COPY --from=node /usr/local/include /usr/local/include
-COPY --from=node /usr/local/bin /usr/local/bin
+ARG PNPM_VERSION=12.16.1
 
-### BUILD it
-### docker build -t docker-php-build https://raw.githubusercontent.com/alex-scott/hurrypress-phing/master/Dockerfile
+RUN         apk add --no-cache \
+                    curl ca-certificates \
+                    git git-lfs patch bash tar unzip zip openssh-client \
+                    mariadb mariadb-client openssl \
+                    python3 py3-pip \
+                    libstdc++ libgcc
 
-# Prepare environment
-RUN         mkdir -p /opt
-RUN         addgroup -g 1100 phing
-RUN         adduser -h /opt/composer -s /bin/ash -g "Phing" -u 1100 -D -G phing phing
+COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
 
-## Packages management
-RUN         apk update && \
-            apk upgrade && \
-            apk add --no-cache \
-                    curl ca-certificates graphviz shadow \
-                    git git-lfs patch bash tar openssh-client zip \
-		            mysql-client \
-                    python3 py3-pip
+# Am_Setup::PHP_EXTENSIONS not in the base image + optional ones used by core and plugins
+RUN         install-php-extensions bcmath gd gmp intl mysqli pdo_mysql soap zip \
+            && rm /usr/local/bin/install-php-extensions \
+            && echo 'memory_limit=-1' > "$PHP_INI_DIR/conf.d/memory.ini"
 
-RUN curl -sSLf \
-        -o /usr/local/bin/install-php-extensions \
-        https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions && \
-    chmod +x /usr/local/bin/install-php-extensions
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
+COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=node /usr/local/include/node /usr/local/include/node
+RUN         ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+            && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
+RUN         npm install -g pnpm@${PNPM_VERSION} sass \
+            && npm cache clean --force \
+            && ln -s /usr/local/bin/sass /usr/bin/scss
 
-RUN install-php-extensions zip pdo_mysql
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# clean
-RUN rm -rf /var/cache/apk/* && rm /usr/local/bin/install-php-extensions
+COPY        --chmod=755 mysql-start /usr/local/bin/mysql-start
 
-RUN         npm install -g pnpm@${PNPM_VERSION} sass
+# MariaDB 11.4+ clients require TLS by default; build/test DB servers have none
+RUN         printf '[client]\nskip-ssl\n' > /etc/my.cnf.d/zz-client-no-ssl.cnf
 
-RUN         ln -s /usr/local/bin/sass /usr/bin/scss
-
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-RUN         mkdir -p /opt/composer/
-
-RUN         test -f  /usr/local/lib/php/Archive/Tar.php || pear install Archive_Tar
-
-# Run environment variable, required files, etc.
-ENV         PHING_UID=1100
-ENV         PHING_GID=1100
-ENV         PATH=$PATH:/opt/composer/vendor/bin
-
-CMD         ["/usr/bin/php"]
+CMD         ["/usr/local/bin/php"]

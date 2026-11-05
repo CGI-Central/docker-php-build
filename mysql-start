@@ -1,0 +1,43 @@
+#!/bin/sh
+# Starts a throwaway MariaDB on 0.0.0.0:3306 with an empty datadir in RAM, waits until it is up.
+# Env: MYSQL_ROOT_PASSWORD (default "root"), MYSQL_DATABASE (optional),
+#      MYSQL_DATADIR (default /dev/shm/mysql; any tmpfs, e.g. compose "tmpfs: /var/lib/mysql")
+set -e
+
+: "${MYSQL_ROOT_PASSWORD:=root}"
+: "${MYSQL_DATADIR:=/dev/shm/mysql}"
+
+rm -rf "$MYSQL_DATADIR"
+mkdir -p /run/mysqld "$MYSQL_DATADIR"
+chown mysql:mysql /run/mysqld "$MYSQL_DATADIR"
+
+set -- --datadir="$MYSQL_DATADIR" \
+    --innodb-log-file-size=8M --innodb-data-file-path=ibdata1:4M:autoextend --innodb-autoextend-increment=4 \
+    --innodb-buffer-pool-size=64M --innodb-flush-log-at-trx-commit=0 --innodb-doublewrite=0 \
+    --skip-log-bin --skip-networking=0 --bind-address=0.0.0.0
+
+mariadb-install-db --user=mysql --skip-test-db --auth-root-authentication-method=normal "$@" >/dev/null
+mariadbd --user=mysql "$@" >/tmp/mysqld.log 2>&1 &
+
+i=0
+until mariadb-admin ping --silent >/dev/null 2>&1; do
+    i=$((i + 1))
+    if [ "$i" -ge 60 ]; then
+        echo "MariaDB did not start" >&2
+        cat /tmp/mysqld.log >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+mariadb -uroot <<SQL
+CREATE USER 'root'@'%' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
+GRANT ALL ON *.* TO 'root'@'%' WITH GRANT OPTION;
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
+SQL
+
+if [ -n "$MYSQL_DATABASE" ]; then
+    mariadb -uroot -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\`"
+fi
+
+echo "MariaDB is up on 127.0.0.1:3306, datadir $MYSQL_DATADIR"
